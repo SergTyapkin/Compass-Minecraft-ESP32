@@ -1,0 +1,9 @@
+{
+    "files.associations": {
+        "cstddef": "cpp",
+        "cmath": "cpp",
+        "wiring_private.h": "c",
+        "pins_arduino.h": "c",
+        "*.cppstepr": "cpp"
+    }
+}
