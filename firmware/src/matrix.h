@@ -5,7 +5,7 @@
 #include "config.h"
 #include "gfx.h"
 
-Adafruit_NeoPixel strip(LED_N, LED_PIN, NEO_GRB + NEO_KHZ800);
+Adafruit_NeoPixel strip(LED_COUNT, LED_PIN, NEO_GRB + NEO_KHZ800);
 
 static void showArrowSprite(uint8_t n, uint32_t cols[3]) {
     const Pix* pix = getPix(n);
@@ -28,17 +28,15 @@ static void showArrowRad(float head, uint32_t cols[3]) {
 class Disp : public GFX {
    public:
     void drawPixel(uint8_t x, uint8_t y) override {
-        if (x > 9 || y > 4) return;
-        if (y == 4 && (x == 0 || x == 1 || x == 8 || x == 9)) return;
+        if (x >= LED_MATRIX_WIDTH || y >= LED_MATRIX_HEIGHT || x < 0 || y < 0) return;
 
-        size_t pos = y * 10 + ((y & 1) ? (9 - x) : x);
-        if (y == 4) pos -= 2;
+        size_t pos = y * LED_MATRIX_WIDTH + x;
         strip.setPixelColor(pos, color);
     }
 
-    void drawSprite(const uint8_t (*s)[2], size_t size) {
-        size_t len = size / sizeof(s[0]);
-        while (len--) drawPixel(s[len][0], s[len][1]);
+    void drawSprite(const uint8_t (*s)[2], size_t spriteSize, uint8_t x = 0, uint8_t y = 0) {
+        size_t len = spriteSize / sizeof(s[0]);
+        while (len--) drawPixel(s[len][0] + x, s[len][1] + y);
     }
 
     void update() {

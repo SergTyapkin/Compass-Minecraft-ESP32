@@ -1,7 +1,9 @@
 #pragma once
 #include <inttypes.h>
 
-static const uint8_t _numbers[][5][3] = {
+#define SPRITE_NUMBER_HEIGHT 5
+#define SPRITE_NUMBER_WIDTH 3
+static const uint8_t _numbers[][SPRITE_NUMBER_HEIGHT][SPRITE_NUMBER_WIDTH] = {
     {
         {1, 1, 1},
         {1, 0, 1},
