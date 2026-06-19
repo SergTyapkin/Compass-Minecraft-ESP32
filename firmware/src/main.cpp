@@ -43,7 +43,7 @@ FileData fdata(&LittleFS, "/cfg.cfg", 'A', &cfg, sizeof(cfg));
 
 uButton btn(BTN_PIN);
 
-QMC5883L mag(0x2C);
+QMC5883L mag(I2C_MAG_ADDR);
 
 TinyGPSPlus gps;
 
