@@ -61,6 +61,17 @@ static uint32_t GPSColors[] = {
     Adafruit_NeoPixel::Color(120, 120, 120),
 };
 
+// ===== BUZZER SETTINGS =====
+#define BUZZER_PWM_CHANNEL 1
+#define BUZZER_PWM_RESOLUTION 8
+#define BUZZER_TONE_DURATION 150  // ms per note
+
+// ===== BUZZER STATE =====
+static bool victoryPointReached = false;
+static unsigned long victoryStartTime = 0;
+static int victoryNoteIndex = 0;
+static bool victoryPlaying = false;
+
 #define PROGRESS_BAR_HEGIHT 4
 #define PROGRESS_BAR_WIDTH LED_MATRIX_WIDTH
 #define PROGRESS_BAR_Y (LED_MATRIX_HEIGHT - PROGRESS_BAR_HEGIHT) / 2
@@ -84,6 +95,77 @@ bool onCalibrate(const MagCalProgress& p) {
     disp.update();
 
     return p.elapsed > CALIBRATION_MIN_TIME_MS && p.balance > CALIBRATION_MIN_PERCENT;
+}
+
+// ===== VICTORY MELODY =====
+// Простая восходящая победная мелодия (как в Mario / Zelda)
+void playVictoryMelody() {
+    // Ноты: C5, D5, E5, G5, C6 (восходящая гамма)
+    const int notes[] = {523, 587, 659, 784, 1047};
+    const int noteCount = 5;
+    
+    for (int i = 0; i < noteCount; i++) {
+        ledcSetup(BUZZER_PWM_CHANNEL, notes[i], BUZZER_PWM_RESOLUTION);
+        ledcWrite(BUZZER_PWM_CHANNEL, 128);  // 50% duty cycle
+        delay(BUZZER_TONE_DURATION);
+        ledcWrite(BUZZER_PWM_CHANNEL, 0);
+        delay(50);  // small pause between notes
+    }
+}
+
+// ===== NON-BLOCKING VICTORY MELODY =====
+void startVictoryMelody() {
+    Serial.println("  🔊 Start playing winning melody!");
+    victoryPlaying = true;
+    victoryNoteIndex = 0;
+    victoryStartTime = millis();
+    victoryPointReached = true;  // чтобы не повторять
+}
+
+void tickBuzzer() {
+    if (!victoryPlaying) return;
+    
+    // Ноты: C5, D5, E5, G5, C6
+    const int notes[] = {523, 587, 659, 784, 1047};
+    const int noteCount = 5;
+    const int noteDuration = 150;
+    const int pauseDuration = 50;
+    
+    static unsigned long lastNoteTime = 0;
+    static bool playingNote = true;
+    
+    if (victoryNoteIndex >= noteCount) {
+        // Мелодия завершена
+        ledcWrite(BUZZER_PWM_CHANNEL, 0);
+        victoryPlaying = false;
+        Serial.println("  🔈 Winnng melody played to the end");
+        return;
+    }
+    
+    unsigned long now = millis();
+    
+    if (playingNote) {
+        // Включаем ноту
+        if (now - lastNoteTime >= noteDuration) {
+            ledcWrite(BUZZER_PWM_CHANNEL, 0);
+            playingNote = false;
+            lastNoteTime = now;
+        }
+    } else {
+        // Пауза между нотами
+        if (now - lastNoteTime >= pauseDuration) {
+            victoryNoteIndex++;
+            if (victoryNoteIndex < noteCount) {
+                ledcSetup(BUZZER_PWM_CHANNEL, notes[victoryNoteIndex], BUZZER_PWM_RESOLUTION);
+                ledcWrite(BUZZER_PWM_CHANNEL, 128);
+                playingNote = true;
+                lastNoteTime = now;
+            } else {
+                // Мелодия завершена
+                victoryPlaying = false;
+            }
+        }
+    }
 }
 
 void setup() {
@@ -173,6 +255,13 @@ void setup() {
     mag.head.declinDeg = 10;
     Serial.println("  ✅ Magnetometer axes configured");
 
+    // ===== BUZZER INIT =====
+    Serial.println("STEP 5: Initializing Buzzer...");
+    ledcSetup(BUZZER_PWM_CHANNEL, 440, BUZZER_PWM_RESOLUTION);
+    ledcAttachPin(BUZZER_PIN, BUZZER_PWM_CHANNEL);
+    ledcWrite(BUZZER_PWM_CHANNEL, 0);
+    Serial.printf("  ✅ Buzzer initialized on pin %d\n", BUZZER_PIN);
+
     Serial.println("\n═══════════════════════════════════════");
     Serial.println("✅ SETUP COMPLETE!");
     Serial.println("═══════════════════════════════════════\n");
@@ -218,6 +307,9 @@ void loop() {
     if (Serial0.available()) {
         gps.encode(Serial0.read());
     }
+
+    // ------ Buzzer tick (non-blocking)
+    tickBuzzer();
 
     // ------ Display
     EVERY16_MS(100) {
@@ -335,6 +427,17 @@ void loop() {
                 if (gps.location.isValid()) {
                     uint32_t dist = gps.distanceBetween(cfg.lat, cfg.lng, gps.location.lat(), gps.location.lng());
                     Serial.printf("  📏 Distance: %d m\n", dist);
+                    
+                    // ===== CHECK IF TARGET REACHED =====
+                    if (dist <= GPS_DISTANCE_TO_POINT_REACHED_METERS) {
+                        if (!victoryPointReached) { // Чтобы мелодия не играла постоянно при нахождении рядом с точкой
+                            Serial.println("  🎉 TARGET POINT REACHED! Playing winning melody!");
+                            startVictoryMelody();
+                        }
+                    } else {
+                        victoryPointReached = false;
+                    }
+                    
                     const uint8_t BETWEEN_NUMBERS_WIDTH = 1;
                     const uint8_t PADDING_FROM_BORDER_X = (LED_MATRIX_WIDTH - BETWEEN_NUMBERS_WIDTH - SPRITE_NUMBER_WIDTH * 2) / 2;
                     const uint8_t PADDING_FROM_BORDER_Y = (LED_MATRIX_HEIGHT - SPRITE_NUMBER_HEIGHT) / 2;
@@ -465,6 +568,7 @@ void loop() {
                     cfg.lat = gps.location.lat();
                     cfg.lng = gps.location.lng();
                     fdata.updateNow();
+                    victoryPointReached = false; // Сброс флага достижения точки при сохранении новой точки
                     Serial.printf("  📍 GPS point saved! Lat=%.6f Lon=%.6f\n", cfg.lat, cfg.lng);
                 } else {
                     Serial.println("  ❌ GPS no fix, cannot save point!");
