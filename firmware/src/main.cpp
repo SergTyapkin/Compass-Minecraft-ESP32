@@ -72,6 +72,9 @@ static unsigned long victoryStartTime = 0;
 static int victoryNoteIndex = 0;
 static bool victoryPlaying = false;
 
+// ===== ANIMATIONS VARS =====
+static unsigned long const INITIAL_TIME = millis();
+
 #define PROGRESS_BAR_HEGIHT 4
 #define PROGRESS_BAR_WIDTH LED_MATRIX_WIDTH
 #define PROGRESS_BAR_Y (LED_MATRIX_HEIGHT - PROGRESS_BAR_HEGIHT) / 2
@@ -337,35 +340,92 @@ void loop() {
             case Mode::Charging: {
                 switch (battery.getState()) { // Проверяем состояние батарейки
                     case Battery::STATE_FULL: {
-                        // Заряжена - зеленая батарейка
-                        disp.color = 0x00ff00;
+                        // ===== РИСУЕМ БАТАРЕЙКУ С ПЛАВНЫМ ПЕРЕЛИВОМ =====
+                        #define ANIMATION_BATTERY_FULL_HUE_INITIAL_DEG 90
+                        #define ANIMATION_BATTERY_FULL_HUE_AMPLITUDE_DEG 15
+                        #define ANIMATION_BATTERY_FULL_HUE_ANIMATION_SPEED 0.001
+                        #define ANIMATION_BATTERY_FULL_HUE_BRIGHTNESS cfg.brightness
+
+                        unsigned long timeFromStart = millis() - INITIAL_TIME;
+                        
+                        // Получаем оттенок цвета
+                        uint16_t hue = 
+                            ANIMATION_BATTERY_FULL_HUE_INITIAL_DEG * 256 +
+                            sin(timeFromStart * ANIMATION_BATTERY_FULL_HUE_ANIMATION_SPEED) *
+                            ANIMATION_BATTERY_FULL_HUE_AMPLITUDE_DEG * 256;
+                        uint32_t frameColor = strip.ColorHSV(hue, 255, ANIMATION_BATTERY_FULL_HUE_BRIGHTNESS);
+                        
+                        // Рисуем батарейку с плавно меняющимся цветом
+                        disp.color = frameColor;
                         disp.drawSprite(battery_full, sizeof(battery_full), 0, 1);
                         Serial.println(" 🔋 Battery FULL");
                         break;
                     }
                     
                     case Battery::STATE_CHARGING: {
-                        // Заряжается - анимация заполнения
-                        static uint8_t fillLevel = 0;
-                        static unsigned long lastFillUpdate = 0;
-                        static const uint8_t MAX_FILL_LEVEL = 4; // Максимальный уровень заполнения
+                        // ===== 1. РИСУЕМ КОРПУС БАТАРЕЙКИ С ПЛАВНЫМ ПЕРЕЛИВОМ =====
+                        #define ANIMATION_BATTERY_HUE_INITIAL_DEG 32
+                        #define ANIMATION_BATTERY_HUE_AMPLITUDE_DEG 10
+                        #define ANIMATION_BATTERY_HUE_ANIMATION_SPEED 0.001
+                        #define ANIMATION_BATTERY_HUE_BRIGHTNESS cfg.brightness
+
+                        unsigned long timeFromStart = millis() - INITIAL_TIME;
                         
-                        // Обновляем уровень заполнения каждые 200 мс
-                        if (millis() - lastFillUpdate > 200) {
-                            lastFillUpdate = millis();
-                            fillLevel++;
-                            if (fillLevel > MAX_FILL_LEVEL) fillLevel = 0;
-                        }
+                        // Получаем оттенок цвета
+                        uint16_t hue = 
+                            ANIMATION_BATTERY_HUE_INITIAL_DEG * 256 +
+                            sin(timeFromStart * ANIMATION_BATTERY_HUE_ANIMATION_SPEED) *
+                            ANIMATION_BATTERY_HUE_AMPLITUDE_DEG * 256;
+                        uint32_t frameColor = strip.ColorHSV(hue, 255, ANIMATION_BATTERY_HUE_BRIGHTNESS);
                         
-                        // Рисуем корпус батарейки
-                        disp.color = 0xff8800; // orange
+                        // Рисуем корпус батарейки с плавно меняющимся цветом
+                        disp.color = frameColor;
                         disp.drawSprite(battery_frame, sizeof(battery_frame), 0, 1);
                         
-                        // Рисуем заполнение от 0 до 4 пикселей
-                        disp.drawRect(1, 2, fillLevel, 2);
+                        // ===== 2. АНИМАЦИЯ ЗАПОЛНЕНИЯ ПОЛОСЫ ЗАРЯДКИ ГРАДИЕНТНОЙ ВОЛНОЙ =====
+                        #define ANIMATION_WAVE_WIDTH 5
+                        #define ANIMATION_WAVE_MAX_POSITION 15
+                        #define ANIMATION_WAVE_STEP_MS 7
+                        #define ANIMATION_WAVE_MAX_BRIGHTNESS cfg.brightness
+                        #define ANIMATION_WAVE_HUE_DEG 50
+
+                        static unsigned long lastAnimUpdate = 0;
+                        static int wavePosition = -ANIMATION_WAVE_WIDTH;
                         
-                        Serial.printf(" 🔋 Charging animation... level %d/%d\n", fillLevel, MAX_FILL_LEVEL);
+                        // Обновляем анимацию (волна шагает)
+                        if (millis() - lastAnimUpdate > ANIMATION_WAVE_STEP_MS) {
+                            lastAnimUpdate = millis();
+                            
+                            // Фаза волны
+                            wavePosition++;
+                            if (wavePosition > ANIMATION_WAVE_MAX_POSITION) {
+                                wavePosition = -ANIMATION_WAVE_WIDTH;
+                            }
+                        }
+                        
+                        // Определяем яркость каждого пикселя в зависимости от позиции волны
+                        // Используем 5x2 область полосы для заполнения (x = 1..5, y = 2..3)
+                        for (int y = 2; y <= 3; y++) {
+                            for (int x = 1; x <= 5; x++) {
+                                // Вычисляем расстояние от текущей позиции до центра волны
+                                int distFromWave = abs(x - wavePosition);
+                                
+                                // Яркость зависит от расстояния до центра волны:
+                                uint8_t brightness = 0;
+                                // Ремаппинг расстояния в яркость (0-max) -> (255-0)
+                                brightness = map(distFromWave, 0, ANIMATION_WAVE_WIDTH + 0.01, ANIMATION_WAVE_MAX_BRIGHTNESS, 0);
+                                
+                                if (distFromWave > ANIMATION_WAVE_WIDTH) {
+                                    continue;
+                                }
+
+                                uint32_t waveColor = strip.ColorHSV(ANIMATION_WAVE_HUE_DEG * 256, 255, brightness);
+                                disp.color = waveColor;
+                                disp.drawPixel(x, y);
+                            }
+                        }
                         break;
+                        Serial.println(" 🔋 Battery in charging... Playing wave animation");
                     }
                     
                     case Battery::STATE_ERROR: {
