@@ -11,17 +11,23 @@
 #include "icons.h"
 #include "matrix.h"
 #include "battery.h"
+#include "timeManager.h"
 
 /*
-    удержание - яркость
+    Управление кнопкой:
+
+    Удержание:
+        В любом режиме - именение яркости. При отпускании и зажатии заново меняет направление изменения яркости (вниз / вверх)
     1x клик:
-        в режиме GPS - показать расстояние до точки, кликнуть ещё раз - направление
-    2x клик - смена режима:
-        круг - компас
-        треугольник - GPS
+        🧭 в режиме компаса - ничего
+        🌐 в режиме GPS - переключение - показать расстояние до точки / направление к ней
+        🕓 в реижме часов - переключение - показать время стрелкой компаса / самими часами
+    2x клик - смена режима по кругу:
+        => 🧭 Режим компаса -> 🌐 Режим GPS -> 🕓 Режим часов =>
     3x клик:
-        в режиме компаса - калибровка компаса
-        в режиме GPS - запомнить точку
+        🧭 в режиме компаса - калибровка компаса
+        🌐 в режиме GPS - запомнить точку
+        🕓 в реижме часов - синхрнизация с NPT сервером
 */
 
 enum class Mode {
@@ -29,6 +35,8 @@ enum class Mode {
     Compass,
     TargetDir,
     TargetDist,
+    Clock,
+    ClockCompass,
 };
 
 struct Data {
@@ -49,22 +57,34 @@ TinyGPSPlus gps;
 
 Battery battery(BATTERY_CHARGING_PIN, BATTERY_FULL_PIN);
 
-static uint32_t compassColors[] = {
-    Adafruit_NeoPixel::Color(255, 0, 0),
-    Adafruit_NeoPixel::Color(60, 0, 0),
-    Adafruit_NeoPixel::Color(120, 120, 120),
+TimeManager timeManager(WIFI_SSID_NAME, WIFI_PASSWORD, NTP_SERVER_HOST, GMT_OFFSET_SEC, DAYLIGHT_OFFSET_SEC, true);
+
+// Цвета для вывода обычного компаса (красная стрелка)
+static uint32_t DefaultCompassArrowColors[] = {
+    Adafruit_NeoPixel::Color(255, 0, 0),     // Яркая стрелка
+    Adafruit_NeoPixel::Color(60, 0, 0),      // Темная стрелка
+    Adafruit_NeoPixel::Color(120, 120, 120), // Центр
 };
 
-static uint32_t GPSColors[] = {
-    Adafruit_NeoPixel::Color(0, 255, 0),
-    Adafruit_NeoPixel::Color(0, 60, 0),
-    Adafruit_NeoPixel::Color(120, 120, 120),
+// Цвета для вывода направления в GPS режиме (зеленая стрелка)
+static uint32_t GPSCompassArrowColors[] = {
+    Adafruit_NeoPixel::Color(0, 255, 0),     // Яркая стрелка
+    Adafruit_NeoPixel::Color(0, 60, 0),      // Темная стрелка
+    Adafruit_NeoPixel::Color(120, 120, 120), // Центр
 };
 
-// ===== BUZZER SETTINGS =====
-#define BUZZER_PWM_CHANNEL 1
-#define BUZZER_PWM_RESOLUTION 8
-#define BUZZER_TONE_DURATION 150  // ms per note
+// Цвета для вывода часов (красная стрелка)
+static uint32_t HourClockCompassArrowColors[] = {
+    Adafruit_NeoPixel::Color(255, 0, 0),     // Яркая стрелка
+    Adafruit_NeoPixel::Color(60, 0, 0),      // Темная стрелка
+    Adafruit_NeoPixel::Color(120, 120, 120), // Центр
+};
+// Цвета для вывода минут (синяя стрелка)
+static uint32_t MinuteClockCompassArrowColors[] = {
+    Adafruit_NeoPixel::Color(0, 0, 255),     // Яркая стрелка
+    Adafruit_NeoPixel::Color(0, 0, 60),      // Темная стрелка
+    Adafruit_NeoPixel::Color(0, 0, 0),       // Центр делаем прозрачным
+};
 
 // ===== BUZZER STATE =====
 static bool victoryPointReached = false;
@@ -75,33 +95,30 @@ static bool victoryPlaying = false;
 // ===== ANIMATIONS VARS =====
 static unsigned long const INITIAL_TIME = millis();
 
-#define PROGRESS_BAR_HEGIHT 4
-#define PROGRESS_BAR_WIDTH LED_MATRIX_WIDTH
-#define PROGRESS_BAR_Y (LED_MATRIX_HEIGHT - PROGRESS_BAR_HEGIHT) / 2
-bool onCalibrate(const MagCalProgress& p) {
+bool onCalibrate(const MagCalProgress& progressMsg) {
     disp.clear();
     disp.color = 0xffff00; // yellow
     disp.drawRectStroke(0, PROGRESS_BAR_Y, PROGRESS_BAR_WIDTH, PROGRESS_BAR_HEGIHT);
     
     // Draw progress
-    int progress = p.balance / CALIBRATION_MIN_PERCENT * (PROGRESS_BAR_WIDTH - 2);
+    int progress = progressMsg.balance / CALIBRATION_MIN_PERCENT * (PROGRESS_BAR_WIDTH - 2);
     if (progress > (PROGRESS_BAR_WIDTH - 2)) progress = (PROGRESS_BAR_WIDTH - 2);       // 0.. 8
     disp.color = 0x00ff00; // green
     disp.drawRect(1, PROGRESS_BAR_Y + 1, progress, PROGRESS_BAR_HEGIHT - 3);
 
     // Draw time
-    int elapsedProgress = float(p.elapsed) / CALIBRATION_MIN_TIME_MS * (PROGRESS_BAR_WIDTH - 2);
+    int elapsedProgress = float(progressMsg.elapsed) / CALIBRATION_MIN_TIME_MS * (PROGRESS_BAR_WIDTH - 2);
     if (elapsedProgress > (PROGRESS_BAR_WIDTH - 2)) elapsedProgress = (PROGRESS_BAR_WIDTH - 2);
     disp.color = 0x0000ff; // blue
     disp.drawRect(1, PROGRESS_BAR_Y + PROGRESS_BAR_HEGIHT - 2, elapsedProgress, 1);
 
     disp.update();
 
-    return p.elapsed > CALIBRATION_MIN_TIME_MS && p.balance > CALIBRATION_MIN_PERCENT;
+    return progressMsg.elapsed > CALIBRATION_MIN_TIME_MS && progressMsg.balance > CALIBRATION_MIN_PERCENT;
 }
 
 // ===== VICTORY MELODY =====
-// Простая восходящая победная мелодия (как в Mario / Zelda)
+// Простая восходящая победная мелодия
 void playVictoryMelody() {
     // Ноты: C5, D5, E5, G5, C6 (восходящая гамма)
     const int notes[] = {523, 587, 659, 784, 1047};
@@ -173,7 +190,6 @@ void tickBuzzer() {
 
 void setup() {
     Serial.begin(115200);
-    delay(2000);
     Serial.println("\n╔═══════════════════════════════════╗");
     Serial.println("║     ESP32-C3 GPS Compass          ║");
     Serial.println("╚═══════════════════════════════════╝\n");
@@ -215,7 +231,7 @@ void setup() {
         Serial.printf("  Check wiring: SDA=GPIO%d, SCL=GPIO%d, VCC=3.3V, GND=GND\n", I2C_SDA_PIN, I2C_SCL_PIN);
     }
     
-    // Принудительная инициализация
+    // Принудительная инициализация магнитометра
     Serial.print("  ⚙️  Configuring magnetometer registers... ");
     // 1. Сброс датчика (запись 0x01 в регистр 0x0B)
     Wire.beginTransmission(I2C_MAG_ADDR);
@@ -265,45 +281,31 @@ void setup() {
     ledcWrite(BUZZER_PWM_CHANNEL, 0);
     Serial.printf("  ✅ Buzzer initialized on pin %d\n", BUZZER_PIN);
 
+    // ===== TimeManager INIT =====
+    Serial.println("STEP 6: Initializing TimeManager...");
+    timeManager.begin();
+    Serial.println("  ✅ TimeManager initialized succcessfully");
+
+    // ----- Завершение инициализации
     Serial.println("\n═══════════════════════════════════════");
-    Serial.println("✅ SETUP COMPLETE!");
+    Serial.println("✅ SETUP COMPLETED!");
     Serial.println("═══════════════════════════════════════\n");
     
     Serial.println("Controls:");
-    Serial.println("  🔄 2 clicks - switch mode (Compass ↔ GPS)");
-    Serial.println("  🔄 3 clicks - calibrate compass / save GPS point");
+    Serial.println("  🔄 1 click:");
+    Serial.println("    🧭 Compass - nothing");
+    Serial.println("    🌐 GPS -     switch target/dist mode");
+    Serial.println("    🕓 Clock -   switch compass/clock visual mode");
+    Serial.println("  🔄 2 clicks:");
+    Serial.println("     Switch mode > 🧭 Compass -> 🌐 GPS -> 🕓 Clock >");
+    Serial.println("  🔄 3 clicks:");
+    Serial.println("    🧭 Calibrate compass");
+    Serial.println("    🌐 Save GPS point");
+    Serial.println("    🕓 Sync clock using WiFi");
     Serial.println("  🔄 Hold - adjust brightness\n");
 }
 
 void loop() {
-    static unsigned long lastStatus = 0;
-    
-    // Выводим статус раз в 5 секунд
-    if (millis() - lastStatus > 5000) {
-        lastStatus = millis();
-        Serial.println("\n📊 STATUS UPDATE:");
-        Serial.printf("  Mode: %s\n", 
-                      cfg.mode == Mode::Charging ? "CHARGING" :
-                      cfg.mode == Mode::Compass ? "COMPASS" :
-                      cfg.mode == Mode::TargetDir ? "GPS TARGET DIR" : "GPS TARGET DIST");
-        
-        // Проверяем магнитометр
-        MagRaw test = mag.readRaw();
-        Serial.printf("  Mag RAW: X=%6d Y=%6d Z=%6d\n", test.x, test.y, test.z);
-        
-        // Проверяем GPS
-        if (gps.location.isValid()) {
-            Serial.printf("  GPS: Lat=%.6f Lon=%.6f Sats=%d\n", 
-                          gps.location.lat(), gps.location.lng(), gps.satellites.value());
-        } else {
-            Serial.printf("  GPS: No fix (sats=%d)\n", gps.satellites.value());
-        }
-        
-        // Проверяем кнопку
-        Serial.printf("  Button state: %d\n", digitalRead(BTN_PIN));
-        Serial.println("─────────────────────────────────────");
-    }
-
     btn.tick();
     fdata.tick();
 
@@ -315,17 +317,29 @@ void loop() {
     tickBuzzer();
 
     // ------ Display
-    EVERY16_MS(100) {
+    EVERY16_MS(150) {
         disp.clear();
 
+        Serial.println("\n💠 System monitor info:");
+        Serial.printf("  🔆 Brightness: %d / 255\n", cfg.brightness);
         // Проверка подключения зарядки
-        bool charging = digitalRead(BATTERY_CHARGING_PIN) == LOW;
-        bool full = digitalRead(BATTERY_FULL_PIN) == LOW;
         Battery::State batteryState = battery.getState();
-        Serial.printf("  🔋 Battery state: charging=%d, full=%d, state=%d\n", charging, full, batteryState);
+        Serial.printf(
+            "  🔋 Battery state: %s\n", 
+            batteryState == Battery::State::STATE_CHARGING ? "🟡 Charging" :
+            batteryState == Battery::State::STATE_FULL ? "🟢 Full" :
+            batteryState == Battery::State::STATE_ERROR ? "🔴 Error" :
+            batteryState == Battery::State::STATE_NOT_CHARGING ? "🔻 OK" :
+            "❓ Unknown"
+        );
 
+        // Проверка пинов на всякий случай
         const bool batteryIsChargerConnected = battery.isChargerConnected();
-        Serial.printf("  🔋 Charger connected: %d\n", batteryIsChargerConnected);
+        bool chargingPinValue = digitalRead(BATTERY_CHARGING_PIN) == LOW;
+        bool fullPinValue = digitalRead(BATTERY_FULL_PIN) == LOW;
+        Serial.printf("  🔋 Battery charger connected: %s\n", batteryIsChargerConnected ? "🟢" : "🔸");
+        Serial.printf("  🔋 Charging pin:              %s\n", chargingPinValue ? "🟢" : "🔸");
+        Serial.printf("  🔋 Full pin:                  %s\n", fullPinValue ? "🟢" : "🔸");
         if (batteryIsChargerConnected) { // Если зарядка подключена - переключаем в режим зарядки
             cfg.mode = Mode::Charging;
             fdata.update();
@@ -338,14 +352,10 @@ void loop() {
 
         switch (cfg.mode) {
             case Mode::Charging: {
+                Serial.println("💠 Mode: 🔋 Charging");
                 switch (battery.getState()) { // Проверяем состояние батарейки
                     case Battery::STATE_FULL: {
                         // ===== РИСУЕМ БАТАРЕЙКУ С ПЛАВНЫМ ПЕРЕЛИВОМ =====
-                        #define ANIMATION_BATTERY_FULL_HUE_INITIAL_DEG 90
-                        #define ANIMATION_BATTERY_FULL_HUE_AMPLITUDE_DEG 15
-                        #define ANIMATION_BATTERY_FULL_HUE_ANIMATION_SPEED 0.001
-                        #define ANIMATION_BATTERY_FULL_HUE_BRIGHTNESS cfg.brightness
-
                         unsigned long timeFromStart = millis() - INITIAL_TIME;
                         
                         // Получаем оттенок цвета
@@ -364,11 +374,6 @@ void loop() {
                     
                     case Battery::STATE_CHARGING: {
                         // ===== 1. РИСУЕМ КОРПУС БАТАРЕЙКИ С ПЛАВНЫМ ПЕРЕЛИВОМ =====
-                        #define ANIMATION_BATTERY_HUE_INITIAL_DEG 32
-                        #define ANIMATION_BATTERY_HUE_AMPLITUDE_DEG 10
-                        #define ANIMATION_BATTERY_HUE_ANIMATION_SPEED 0.001
-                        #define ANIMATION_BATTERY_HUE_BRIGHTNESS cfg.brightness
-
                         unsigned long timeFromStart = millis() - INITIAL_TIME;
                         
                         // Получаем оттенок цвета
@@ -383,12 +388,6 @@ void loop() {
                         disp.drawSprite(battery_frame, sizeof(battery_frame), 0, 1);
                         
                         // ===== 2. АНИМАЦИЯ ЗАПОЛНЕНИЯ ПОЛОСЫ ЗАРЯДКИ ГРАДИЕНТНОЙ ВОЛНОЙ =====
-                        #define ANIMATION_WAVE_WIDTH 5
-                        #define ANIMATION_WAVE_MAX_POSITION 15
-                        #define ANIMATION_WAVE_STEP_MS 7
-                        #define ANIMATION_WAVE_MAX_BRIGHTNESS cfg.brightness
-                        #define ANIMATION_WAVE_HUE_DEG 50
-
                         static unsigned long lastAnimUpdate = 0;
                         static int wavePosition = -ANIMATION_WAVE_WIDTH;
                         
@@ -462,29 +461,39 @@ void loop() {
 
             case Mode::Compass: {
                 float heading = mag.headingRad();
-                Serial.printf("  🧭 Compass: heading=%.2f rad\n", heading);
-                showArrowRad(0 - heading, compassColors);
+                MagRaw rawValues = mag.readRaw();
+                Serial.println("💠 Mode: 🧭 Compass");
+                Serial.printf("  🧭 Heading=%.2f rad\n", heading);
+                Serial.printf("  🧭 RAW values: X=%6d Y=%6d Z=%6d\n", rawValues.x, rawValues.y, rawValues.z);
+                // Выводим стрелку компаса
+                showArrowRad(0 - heading, DefaultCompassArrowColors);
                 break;
             }
 
             case Mode::TargetDir:
+                Serial.println("💠 Mode: 🌐 GPS target to DIR");
+
                 if (gps.location.isValid()) {
+                    Serial.printf("  🌐 GPS: Lat=%.6f Lon=%.6f Sats=%d\n", gps.location.lat(), gps.location.lng(), gps.satellites.value());
                     float headDeg = gps.courseTo(gps.location.lat(), gps.location.lng(), cfg.lat, cfg.lng);
                     float heading = mag.headingRad();
-                    Serial.printf("  🎯 TargetDir: headDeg=%.2f, heading=%.2f\n", headDeg, heading);
-                    showArrowRad(radians(headDeg) - heading, GPSColors);
+                    Serial.printf("  🌐 TargetDir: headDeg=%.2f, heading=%.2f\n", headDeg, heading);
+                    showArrowRad(radians(headDeg) - heading, GPSCompassArrowColors);
                     float hdop = gps.hdop.hdop();
                     disp.color = Adafruit_NeoPixel::ColorHSV(hdop ? map(hdop, 20, 0, 0, 20000) : 0);
                     disp.drawPixel(5, 2);  // center
                 } else {
-                    Serial.println("  ❌ GPS no fix, showing cross");
+                    Serial.printf("  🌐 GPS: ❌ No fix (sats=%d)\n", gps.satellites.value());
                     disp.color = 0xff0000;
                     disp.drawSprite(cross, sizeof(cross));
                 }
                 break;
 
             case Mode::TargetDist:
+                Serial.println("💠 Mode: 🌐 GPS DIST to target");
+
                 if (gps.location.isValid()) {
+                    Serial.printf("  🌐 GPS: Lat=%.6f Lon=%.6f Sats=%d\n", gps.location.lat(), gps.location.lng(), gps.satellites.value());
                     uint32_t dist = gps.distanceBetween(cfg.lat, cfg.lng, gps.location.lat(), gps.location.lng());
                     Serial.printf("  📏 Distance: %d m\n", dist);
                     
@@ -530,7 +539,7 @@ void loop() {
                         disp.drawNum(0, LED_MATRIX_WIDTH - PADDING_FROM_BORDER_X - SPRITE_NUMBER_WIDTH, PADDING_FROM_BORDER_Y);
                     }
                 } else {
-                    Serial.println("  ❌ GPS no fix");
+                    Serial.printf("  🌐 GPS: ❌ No fix (sats=%d)\n", gps.satellites.value());
                     disp.color = 0xff0000;
                     disp.drawPixel(2, 2);
                     disp.drawPixel(3, 2);
@@ -541,6 +550,37 @@ void loop() {
                     disp.drawPixel(7, 2);
                 }
                 break;
+
+            case Mode::ClockCompass:
+            case Mode::Clock: {
+                Serial.println("💠 Mode: 🕓 Clock");
+                Serial.printf("  🕓 Full Datetime: 📆 ");
+                Serial.println(timeManager.getDateTimeString());
+                Serial.printf("  🌐 NTP Synced:    %s\n", timeManager.getIsNtpSynced() ? "✅ Yes" : "❌ No");
+                // Выводим часовую стрелку компаса
+                struct tm timeinfo = timeManager.getLocalTimeStruct();
+                showArrowRad(float(timeinfo.tm_hour) / 60.0 * TWO_PI, HourClockCompassArrowColors);
+                // Выводим минутную стрелку компаса
+                showArrowRad(float(timeinfo.tm_min) / 60.0 * TWO_PI, MinuteClockCompassArrowColors);
+                // Выводим 12 желтых квадратиков по сторонам (по 3 на каждой)
+                // Делаем яркость в 2 раза меньше
+                strip.setBrightness(max(cfg.brightness / 2, BRIGHTNESS_MIN));
+                float dWidth = float(CLOCK_MATRIX_WIDTH) / 4.0;
+                float dHeight = float(CLOCK_MATRIX_HEIGHT) / 4.0;
+                disp.color = 0xffff00;
+                for (uint8_t i = 1; i <= 3; i++) {
+                    disp.drawPixel(CLOCK_MATRIX_X + int(dWidth * i), CLOCK_MATRIX_Y); // Верх
+                    disp.drawPixel(CLOCK_MATRIX_X + int(dWidth * i), CLOCK_MATRIX_Y + CLOCK_MATRIX_HEIGHT - 1); // Низ
+                    disp.drawPixel(CLOCK_MATRIX_X, CLOCK_MATRIX_Y + int(dHeight * i)); // Лево
+                    disp.drawPixel(CLOCK_MATRIX_X + CLOCK_MATRIX_WIDTH - 1, CLOCK_MATRIX_Y + int(dHeight * i)); // Право
+                }
+                // Выводим оранжевый квадратик на 12 часах сверху
+                disp.color = 0xff5500;
+                disp.drawPixel(CLOCK_MATRIX_X + CLOCK_MATRIX_WIDTH / 2, CLOCK_MATRIX_Y);
+                // Возвращаем яркость как было
+                strip.setBrightness(cfg.brightness);
+                break;
+            }
         }
         disp.update();
     }
@@ -554,8 +594,8 @@ void loop() {
         Serial.printf("  💡 Brightness direction: %s\n", dir ? "UP" : "DOWN");
     }
     if (btn.step()) {
-        int br = cfg.brightness + (dir ? 20 : -20);
-        cfg.brightness = constrain(br, 10, 255);
+        int br = cfg.brightness + (dir ? BRIGHTNESS_STEP : -BRIGHTNESS_STEP);
+        cfg.brightness = constrain(br, BRIGHTNESS_MIN, BRIGHTNESS_MAX);
         strip.setBrightness(cfg.brightness);
         fdata.update();
         Serial.printf("  💡 Brightness: %d\n", cfg.brightness);
@@ -578,11 +618,21 @@ void loop() {
                 fdata.update();
                 Serial.println("  ⏭️  Switched to TARGET DIST mode");
                 break;
-
             case Mode::TargetDist:
                 cfg.mode = Mode::TargetDir;
                 fdata.update();
                 Serial.println("  ⏭️  Switched to TARGET DIR mode");
+                break;
+
+            case Mode::Clock:
+                cfg.mode = Mode::ClockCompass;
+                fdata.update();
+                Serial.println("  ⏭️  Switched to CLOCK COMPASS mode");
+                break;
+            case Mode::ClockCompass:
+                cfg.mode = Mode::Clock;
+                fdata.update();
+                Serial.println("  ⏭️  Switched to CLOCK mode");
                 break;
         }
     }
@@ -601,6 +651,13 @@ void loop() {
 
             case Mode::TargetDir:
             case Mode::TargetDist:
+                cfg.mode = Mode::Clock;
+                fdata.update();
+                Serial.println("  ⏭️  Switched to CLOCK mode");
+                break;
+
+            case Mode::Clock:
+            case Mode::ClockCompass:
                 cfg.mode = Mode::Compass;
                 fdata.update();
                 Serial.println("  ⏭️  Switched to COMPASS mode");
@@ -638,6 +695,16 @@ void loop() {
                 disp.drawSprite(cross, sizeof(cross));
                 disp.update();
                 delay(500);
+                break;
+
+            case Mode::Clock:
+            case Mode::ClockCompass:
+                Serial.println("  🔄 Starting clocks NTP syncing...");
+                if (timeManager.forceSync()) {
+                    Serial.println("  ✅ Clocks NTP synced!");
+                } else {
+                    Serial.println("  ❌ Clocks NTP syncronization failed");
+                }
                 break;
         }
     }

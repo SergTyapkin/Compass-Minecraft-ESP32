@@ -12,13 +12,16 @@ static void showArrowSprite(uint8_t n, uint32_t cols[3]) {
     size_t len = getArrowLen(n);
 
     for (size_t i = 0; i < len; i++) {
-        strip.setPixelColor(pix[i].pos, cols[pix[i].col]);
+        uint32_t color = cols[pix[i].col];
+        if (color > 0) {
+            strip.setPixelColor(pix[i].pos, color);
+        }
     }
 }
 
 // показать стрелку. 0 - вперёд, в положительном направлении по часовой стрелке
 static void showArrowRad(float head, uint32_t cols[3]) {
-    head += PI;  // повернуть на 180
+    head += COMPASS_ROTATION_OFFSET_RAD;  // повернуть на 180
     while (head < 0) head += TWO_PI;
     while (head >= TWO_PI) head -= TWO_PI;
     int s = head / TWO_PI * arrowAmount;
