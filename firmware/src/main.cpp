@@ -85,6 +85,15 @@ static uint32_t MinuteClockCompassArrowColors[] = {
     Adafruit_NeoPixel::Color(0, 0, 60),      // Темная стрелка
     Adafruit_NeoPixel::Color(0, 0, 0),       // Центр делаем прозрачным
 };
+// Цвета для вывода дисплея часов
+static uint32_t ClockColors[] = {
+    Adafruit_NeoPixel::Color(0, 0, 180),     // Светлое небо
+    Adafruit_NeoPixel::Color(0, 0, 60),      // Темное небо
+    Adafruit_NeoPixel::Color(255, 255, 0),   // Светлая часть стрелки солнца
+    Adafruit_NeoPixel::Color(60, 60, 0),     // Темная часть стрелки солнца
+    Adafruit_NeoPixel::Color(255, 255, 255), // Светлая часть стрелки луны
+    Adafruit_NeoPixel::Color(60, 60, 60),    // Темная часть стрелки луны
+};
 
 // ===== BUZZER STATE =====
 static bool victoryPointReached = false;
@@ -308,13 +317,11 @@ void setup() {
 void loop() {
     btn.tick();
     fdata.tick();
+    tickBuzzer();
 
     if (Serial0.available()) {
         gps.encode(Serial0.read());
     }
-
-    // ------ Buzzer tick (non-blocking)
-    tickBuzzer();
 
     // ------ Display
     EVERY16_MS(150) {
@@ -483,7 +490,7 @@ void loop() {
                     disp.color = Adafruit_NeoPixel::ColorHSV(hdop ? map(hdop, 20, 0, 0, 20000) : 0);
                     disp.drawPixel(5, 2);  // center
                 } else {
-                    Serial.printf("  🌐 GPS: ❌ No fix (sats=%d)\n", gps.satellites.value());
+                    Serial.printf("  🌐 GPS: ❌ No fix (satellites=%d)\n", gps.satellites.value());
                     disp.color = 0xff0000;
                     disp.drawSprite(cross, sizeof(cross));
                 }
@@ -515,23 +522,20 @@ void loop() {
                         disp.drawNum(dist / 10, PADDING_FROM_BORDER_X, PADDING_FROM_BORDER_Y);
                         disp.color = 0x00ff00;
                         disp.drawNum(dist % 10, LED_MATRIX_WIDTH - PADDING_FROM_BORDER_X - SPRITE_NUMBER_WIDTH, PADDING_FROM_BORDER_Y);
-                    // } else if (dist < 10 * LED_COUNT) {
-                    } else if (dist < 10 * (7 * 7)) { // FIXME: hardcoded. Я взял матрицу 7х7 внутри матрицы 8х8
+                    } else if (dist < 10 * (GPS_MATRIX_WIDTH * GPS_MATRIX_HEIGHT)) {
                         disp.color = 0x00ff00;
                         for (uint16_t i = 0; i < dist / 10; i++) {
-                            disp.drawPixel(i % 7, i / 7);
+                            disp.drawPixel(i % GPS_MATRIX_WIDTH, i / GPS_MATRIX_HEIGHT);
                         }
-                    // } else if (dist < 100 * LED_COUNT) {
-                    } else if (dist < 100 * (7 * 7)) { // FIXME: hardcoded. Я взял матрицу 7х7 внутри матрицы 8х8
+                    } else if (dist < 100 * (GPS_MATRIX_WIDTH * GPS_MATRIX_HEIGHT)) {
                         disp.color = 0xffff00;
                         for (uint16_t i = 0; i < dist / 100; i++) {
-                            disp.drawPixel(i % 7, i / 7);
+                            disp.drawPixel(i % GPS_MATRIX_WIDTH, i / GPS_MATRIX_HEIGHT);
                         }
-                    // } else if (dist < 1000 * LED_COUNT) {
-                    } else if (dist < 1000 * (7 * 7)) { // FIXME: hardcoded. Я взял матрицу 7х7 внутри матрицы 8х8
+                    } else if (dist < 1000 * (GPS_MATRIX_WIDTH * GPS_MATRIX_HEIGHT)) {
                         disp.color = 0xff0000;
                         for (uint16_t i = 0; i < dist / 10000; i++) {
-                            disp.drawPixel(i % 7, i / 7);
+                            disp.drawPixel(i % GPS_MATRIX_WIDTH, i / GPS_MATRIX_HEIGHT);
                         }
                     } else {
                         disp.color = 0xff0000;
@@ -539,28 +543,24 @@ void loop() {
                         disp.drawNum(0, LED_MATRIX_WIDTH - PADDING_FROM_BORDER_X - SPRITE_NUMBER_WIDTH, PADDING_FROM_BORDER_Y);
                     }
                 } else {
-                    Serial.printf("  🌐 GPS: ❌ No fix (sats=%d)\n", gps.satellites.value());
+                    Serial.printf("  🌐 GPS: ❌ No fix (satellites=%d)\n", gps.satellites.value());
                     disp.color = 0xff0000;
-                    disp.drawPixel(2, 2);
-                    disp.drawPixel(3, 2);
-                    disp.drawPixel(4, 2);
-                    disp.color = 0x00ff00;
-                    disp.drawPixel(5, 2);
-                    disp.drawPixel(6, 2);
-                    disp.drawPixel(7, 2);
+                    disp.drawSprite(cross, sizeof(cross));
                 }
                 break;
 
-            case Mode::ClockCompass:
-            case Mode::Clock: {
-                Serial.println("💠 Mode: 🕓 Clock");
+            case Mode::ClockCompass: {
+                Serial.println("💠 Mode: 🕓 Clock as arrows");
                 Serial.printf("  🕓 Full Datetime: 📆 ");
                 Serial.println(timeManager.getDateTimeString());
                 Serial.printf("  🌐 NTP Synced:    %s\n", timeManager.getIsNtpSynced() ? "✅ Yes" : "❌ No");
-                // Выводим часовую стрелку компаса
+                
                 struct tm timeinfo = timeManager.getLocalTimeStruct();
-                showArrowRad(float(timeinfo.tm_hour) / 60.0 * TWO_PI, HourClockCompassArrowColors);
+                // Выводим часовую стрелку компаса
+                Serial.printf("  ⌛ Hours:         %d\n", timeinfo.tm_hour);
+                showArrowRad(float(timeinfo.tm_hour) / 24.0 * TWO_PI, HourClockCompassArrowColors);
                 // Выводим минутную стрелку компаса
+                Serial.printf("  ⌛ Minutes:       %d\n", timeinfo.tm_min);
                 showArrowRad(float(timeinfo.tm_min) / 60.0 * TWO_PI, MinuteClockCompassArrowColors);
                 // Выводим 12 желтых квадратиков по сторонам (по 3 на каждой)
                 // Делаем яркость в 2 раза меньше
@@ -579,6 +579,22 @@ void loop() {
                 disp.drawPixel(CLOCK_MATRIX_X + CLOCK_MATRIX_WIDTH / 2, CLOCK_MATRIX_Y);
                 // Возвращаем яркость как было
                 strip.setBrightness(cfg.brightness);
+                break;
+            }
+
+            case Mode::Clock: {
+                Serial.println("💠 Mode: 🕓 Clock display");
+                Serial.printf("  🕓 Full Datetime: 📆 ");
+                Serial.println(timeManager.getDateTimeString());
+                Serial.printf("  🌐 NTP Synced:    %s\n", timeManager.getIsNtpSynced() ? "✅ Yes" : "❌ No");
+                
+                time_t secondsTotal = timeManager.getTime();
+                // Ориентируемся на часы, и по ним показываем картинку
+                Serial.printf("  ⌛ Seconds total:      %d\n", secondsTotal);
+                uint32_t maxSecondsInDay = 60 * 60 * 24;
+                uint32_t secondsInDay = secondsTotal % maxSecondsInDay;
+                Serial.printf("  ⌛ Seconds in day:     %d / %d\n", secondsInDay, maxSecondsInDay);
+                showClockRad(float(secondsInDay) / float(maxSecondsInDay) * 60.0, ClockColors);
                 break;
             }
         }

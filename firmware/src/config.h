@@ -34,23 +34,24 @@
 #define CALIBRATION_MIN_PERCENT 0.75
 
 // Time manager settings
-#define WIFI_SSID_NAME "MY_WIFI_NAME"    // Название сети Wifi
-#define WIFI_PASSWORD "MY_WIFI_PASSWORD" // Пароль от Wifi
+#define WIFI_SSID_NAME "$erg's ₱ixel"    // Название сети Wifi
+#define WIFI_PASSWORD "<YOUR_PASSWORD>"  // Пароль от Wifi
 #define NTP_SERVER_HOST "pool.ntp.org"   // Хост NTP сервера для синхронизации времени
-#define GMT_OFFSET_SEC 3 * 60 * 60       // Смещение часового пояса GMT+3
+#define GMT_OFFSET_SEC (3 * 60 * 60)     // Смещение часового пояса GMT+3
 #define DAYLIGHT_OFFSET_SEC 0            // Смещение летнего/зимнего времени
 
 // Controls
-#define BRIGHTNESS_STEP 2                // Шаг яркости при зажатии кнопки
+#define BRIGHTNESS_STEP 1                // Шаг яркости при зажатии кнопки
 #define BRIGHTNESS_MIN  1                // Минимальное значение яркости
-#define BRIGHTNESS_MAX  255                // Максимальное значение яркости
+#define BRIGHTNESS_MAX  255              // Максимальное значение яркости
 
 // Visuals
-#define COMPASS_ROTATION_OFFSET_RAD PI   // Смещение при выводе компаса (чтобы направление севера магнитометра совпадало со стрелкой)
+#define COMPASS_ROTATION_OFFSET_RAD (PI)    // Смещение при выводе фреймов компаса (чтобы направление севера магнитометра совпадало со стрелкой)
+#define CLOCK_ROTATION_OFFSET_1_TO_60 0     // Смещение при выводе фреймов часов (чтобы 0 часов были полночью на картинке)
 // 🔁 Calibration progressbar params
 #define PROGRESS_BAR_HEGIHT 4                                         // Ширина прогрессбара (по вертикали. Не меньше 4)
 #define PROGRESS_BAR_WIDTH LED_MATRIX_WIDTH                           // Длина прогрессбара (по вертикали. Не меньше 5)
-#define PROGRESS_BAR_Y (LED_MATRIX_HEIGHT - PROGRESS_BAR_HEGIHT) / 2  // Y позиция, откуда рисуем прогрессбар
+#define PROGRESS_BAR_Y ((LED_MATRIX_HEIGHT - PROGRESS_BAR_HEGIHT) / 2)  // Y позиция, откуда рисуем прогрессбар
 // 🔋🟡 Charging animantion params
 // | Corpus
 #define ANIMATION_BATTERY_HUE_INITIAL_DEG 32                 // Средний оттенок в HSV для заряжающейся батарейки (30 - желтый)
@@ -73,3 +74,8 @@
 #define CLOCK_MATRIX_Y 0       // Начало отрисовки часов на матрице по Y
 #define CLOCK_MATRIX_WIDTH 7   // Ширина области матрицы для часов. Лучше нечетные числа
 #define CLOCK_MATRIX_HEIGHT 7  // Высота области матрицы для часов. Лучше нечетные числа
+// 🌐 GPS
+#define GPS_MATRIX_X 0       // Начало отрисовки gps компаса на матрице по X
+#define GPS_MATRIX_Y 0       // Начало отрисовки gps компаса на матрице по Y
+#define GPS_MATRIX_WIDTH 7   // Ширина области матрицы для gps компаса
+#define GPS_MATRIX_HEIGHT 7  // Высота области матрицы для gps компаса
