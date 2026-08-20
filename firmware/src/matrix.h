@@ -42,7 +42,6 @@ static void showArrowRad(float head, uint32_t cols[3]) {
 }
 // Показать часы. Передается значение от 1 до 60
 static void showClockRad(float val1to60, uint32_t cols[3]) {
-    val1to60 += CLOCK_ROTATION_OFFSET_1_TO_60;  // доворачиваем до нужного центра
     val1to60 = constrainNumberByPeriod(val1to60, 60); // Переводим в интервал от 0 до 60
     int s = val1to60 / 60 * clockAmount;
     showClockSprite(s % clockAmount, cols);

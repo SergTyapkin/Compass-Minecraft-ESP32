@@ -558,7 +558,7 @@ void loop() {
                 struct tm timeinfo = timeManager.getLocalTimeStruct();
                 // Выводим часовую стрелку компаса
                 Serial.printf("  ⌛ Hours:         %d\n", timeinfo.tm_hour);
-                showArrowRad(float(timeinfo.tm_hour) / 24.0 * TWO_PI, HourClockCompassArrowColors);
+                showArrowRad(float(timeinfo.tm_hour % 12) / 12.0 * TWO_PI, HourClockCompassArrowColors);
                 // Выводим минутную стрелку компаса
                 Serial.printf("  ⌛ Minutes:       %d\n", timeinfo.tm_min);
                 showArrowRad(float(timeinfo.tm_min) / 60.0 * TWO_PI, MinuteClockCompassArrowColors);
@@ -589,7 +589,7 @@ void loop() {
                 Serial.printf("  🌐 NTP Synced:    %s\n", timeManager.getIsNtpSynced() ? "✅ Yes" : "❌ No");
                 
                 time_t secondsTotal = timeManager.getTime();
-                // Ориентируемся на часы, и по ним показываем картинку
+                // Ориентируемся на секунды в дне, и по ним показываем картинку
                 Serial.printf("  ⌛ Seconds total:      %d\n", secondsTotal);
                 uint32_t maxSecondsInDay = 60 * 60 * 24;
                 uint32_t secondsInDay = secondsTotal % maxSecondsInDay;

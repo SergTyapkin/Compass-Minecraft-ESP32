@@ -47,7 +47,6 @@
 
 // Visuals
 #define COMPASS_ROTATION_OFFSET_RAD (PI)    // Смещение при выводе фреймов компаса (чтобы направление севера магнитометра совпадало со стрелкой)
-#define CLOCK_ROTATION_OFFSET_1_TO_60 0     // Смещение при выводе фреймов часов (чтобы 0 часов были полночью на картинке)
 // 🔁 Calibration progressbar params
 #define PROGRESS_BAR_HEGIHT 4                                         // Ширина прогрессбара (по вертикали. Не меньше 4)
 #define PROGRESS_BAR_WIDTH LED_MATRIX_WIDTH                           // Длина прогрессбара (по вертикали. Не меньше 5)
