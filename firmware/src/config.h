@@ -34,8 +34,8 @@
 #define CALIBRATION_MIN_PERCENT 0.75
 
 // Time manager settings
-#define WIFI_SSID_NAME "$erg's ₱ixel"    // Название сети Wifi
-#define WIFI_PASSWORD "<YOUR_PASSWORD>"  // Пароль от Wifi
+#define WIFI_SSID_NAME "Sergs-Archer-E204"    // Название сети Wifi
+#define WIFI_PASSWORD "<YOUR-WIFI-PASSWORD>"  // Пароль от Wifi
 #define NTP_SERVER_HOST "pool.ntp.org"   // Хост NTP сервера для синхронизации времени
 #define GMT_OFFSET_SEC (3 * 60 * 60)     // Смещение часового пояса GMT+3
 #define DAYLIGHT_OFFSET_SEC 0            // Смещение летнего/зимнего времени
@@ -60,7 +60,7 @@
 // | Filling
 #define ANIMATION_WAVE_WIDTH 5                               // Длина изредка пробегающей волны зарядки
 #define ANIMATION_WAVE_MAX_POSITION 15                       // Дальнее положение пробегающей волны зарядки
-#define ANIMATION_WAVE_STEP_MS 7                             // Скорость пробегания волны
+#define ANIMATION_WAVE_STEP_MS 30                            // Скорость пробегания волны
 #define ANIMATION_WAVE_MAX_BRIGHTNESS cfg.brightness         // Яркость волны
 #define ANIMATION_WAVE_HUE_DEG 50                            // Оттенок в HSV для волны (50 - между желтым и зеленым)
 // 🔋🟢 Charged animantion params

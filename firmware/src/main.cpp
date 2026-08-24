@@ -324,7 +324,7 @@ void loop() {
     }
 
     // ------ Display
-    EVERY16_MS(150) {
+    EVERY16_MS(30) { // 30 ms for 30+ fps
         disp.clear();
 
         Serial.println("\n💠 System monitor info:");
@@ -588,7 +588,7 @@ void loop() {
                 Serial.println(timeManager.getDateTimeString());
                 Serial.printf("  🌐 NTP Synced:    %s\n", timeManager.getIsNtpSynced() ? "✅ Yes" : "❌ No");
                 
-                time_t secondsTotal = timeManager.getTime();
+                time_t secondsTotal = timeManager.getTime() + GMT_OFFSET_SEC;
                 // Ориентируемся на секунды в дне, и по ним показываем картинку
                 Serial.printf("  ⌛ Seconds total:      %d\n", secondsTotal);
                 uint32_t maxSecondsInDay = 60 * 60 * 24;
