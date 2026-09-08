@@ -12,6 +12,7 @@
 #include "matrix.h"
 #include "battery.h"
 #include "timeManager.h"
+#include "medianFilter.h"
 
 /*
     Управление кнопкой:
@@ -52,6 +53,9 @@ FileData fdata(&LittleFS, "/cfg.cfg", 'A', &cfg, sizeof(cfg));
 uButton btn(BTN_PIN);
 
 QMC5883L mag(I2C_MAG_ADDR);
+MedianFilter<int16_t, MAG_FILTER_SIZE> magFilterX;
+MedianFilter<int16_t, MAG_FILTER_SIZE> magFilterY;
+MedianFilter<int16_t, MAG_FILTER_SIZE> magFilterZ;
 
 TinyGPSPlus gps;
 
@@ -277,11 +281,18 @@ void setup() {
     Serial.println("  ✅ Magnetometer initialized");
 
     // ось y вперёд
-    mag.head.axis[0] = 1;
-    mag.head.axis[1] = 0;
-    mag.head.sign[1] = -1;
+    mag.head.axis[0] = 0;
+    mag.head.axis[1] = 1;
+    mag.head.sign[0] = 1;
+    mag.head.sign[1] = 1;
     mag.head.declinDeg = 10;
     Serial.println("  ✅ Magnetometer axes configured");
+
+    // сброс фильтров
+    magFilterX.reset();
+    magFilterY.reset();
+    magFilterZ.reset();
+    Serial.printf("  ✅ Median filters initialized (size: %d)\n", MAG_FILTER_SIZE);
 
     // ===== BUZZER INIT =====
     Serial.println("STEP 5: Initializing Buzzer...");
@@ -467,13 +478,38 @@ void loop() {
             }
 
             case Mode::Compass: {
-                float heading = mag.headingRad();
+                // ===== ЧТЕНИЕ С ФИЛЬТРАЦИЕЙ =====
                 MagRaw rawValues = mag.readRaw();
+                
+                // Добавляем в фильтры
+                magFilterX.add(rawValues.x);
+                magFilterY.add(rawValues.y);
+                magFilterZ.add(rawValues.z);
+                
+                // Получаем отфильтрованные значения
+                int16_t filteredX, filteredY, filteredZ;
+                if (magFilterX.isFull()) {
+                    filteredX = magFilterX.getMedian();
+                    filteredY = magFilterY.getMedian();
+                    filteredZ = magFilterZ.getMedian();
+                } else {
+                    // Пока фильтр не заполнен, используем сырые данные
+                    filteredX = rawValues.x;
+                    filteredY = rawValues.y;
+                    filteredZ = rawValues.z;
+                }
+                
+                // Вычисляем heading из отфильтрованных данных
+                float heading = atan2(filteredY, filteredX);
+                if (heading < 0) heading += TWO_PI;
+                
                 Serial.println("💠 Mode: 🧭 Compass");
-                Serial.printf("  🧭 Heading=%.2f rad\n", heading);
                 Serial.printf("  🧭 RAW values: X=%6d Y=%6d Z=%6d\n", rawValues.x, rawValues.y, rawValues.z);
+                Serial.printf("  🧭 FILT values: X=%6d Y=%6d Z=%6d\n", filteredX, filteredY, filteredZ);
+                Serial.printf("  🧭 Heading=%.2f rad (%.1f°)\n", heading, degrees(heading));
+                
                 // Выводим стрелку компаса
-                showArrowRad(0 - heading, DefaultCompassArrowColors);
+                showArrowRad(COMPASS_ROTATION_OFFSET_RAD - heading, DefaultCompassArrowColors);
                 break;
             }
 

@@ -1,7 +1,7 @@
 #pragma once
 
 // Button
-#define BTN_PIN 10                       // Пин кнопки
+#define BTN_PIN 5                         // Пин кнопки
 
 // LED matrix
 #define LED_PIN 0                        // Пин для сигнала в LED-матрицу
@@ -33,15 +33,18 @@
 #define CALIBRATION_MIN_TIME_MS 10000
 #define CALIBRATION_MIN_PERCENT 0.75
 
+// Filtering
+#define MAG_FILTER_SIZE 15               // Размер медианного фильтра для магнитометра
+
 // Time manager settings
 #define WIFI_SSID_NAME "Sergs-Archer-E204"    // Название сети Wifi
-#define WIFI_PASSWORD "<YOUR-WIFI-PASSWORD>"  // Пароль от Wifi
+#define WIFI_PASSWORD "<YOUR_WIFI_PASSWORD>"  // Пароль от Wifi
 #define NTP_SERVER_HOST "pool.ntp.org"   // Хост NTP сервера для синхронизации времени
 #define GMT_OFFSET_SEC (3 * 60 * 60)     // Смещение часового пояса GMT+3
 #define DAYLIGHT_OFFSET_SEC 0            // Смещение летнего/зимнего времени
 
 // Controls
-#define BRIGHTNESS_STEP 1                // Шаг яркости при зажатии кнопки
+#define BRIGHTNESS_STEP 5                // Шаг яркости при зажатии кнопки
 #define BRIGHTNESS_MIN  1                // Минимальное значение яркости
 #define BRIGHTNESS_MAX  255              // Максимальное значение яркости
 
