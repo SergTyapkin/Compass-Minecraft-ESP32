@@ -81,7 +81,7 @@ static uint32_t GPSCompassArrowColors[] = {
 static uint32_t HourClockCompassArrowColors[] = {
     Adafruit_NeoPixel::Color(255, 0, 0),     // Яркая стрелка
     Adafruit_NeoPixel::Color(60, 0, 0),      // Темная стрелка
-    Adafruit_NeoPixel::Color(120, 120, 120), // Центр
+    Adafruit_NeoPixel::Color(0, 0, 0), // Центр делаем прозрачным
 };
 // Цвета для вывода минут (синяя стрелка)
 static uint32_t MinuteClockCompassArrowColors[] = {
@@ -624,7 +624,7 @@ void loop() {
                 Serial.println(timeManager.getDateTimeString());
                 Serial.printf("  🌐 NTP Synced:    %s\n", timeManager.getIsNtpSynced() ? "✅ Yes" : "❌ No");
                 
-                time_t secondsTotal = timeManager.getTime() + GMT_OFFSET_SEC;
+                time_t secondsTotal = timeManager.getTime() + GMT_OFFSET_SEC + DAYLIGHT_OFFSET_SEC;
                 // Ориентируемся на секунды в дне, и по ним показываем картинку
                 Serial.printf("  ⌛ Seconds total:      %d\n", secondsTotal);
                 uint32_t maxSecondsInDay = 60 * 60 * 24;
